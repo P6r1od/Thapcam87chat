@@ -1,3 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>NM Chat Realtime</title>
+  <style>
+    body {
+      margin:  0;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+    }
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+    .left {
+      flex: 3;
+      display: flex;
+      flex-direction: column;
+      background-color: #ffffff;
+      padding: 10px;
+    }
+    #chatBox {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+      background-color: #fff;
+    }
+    .msg {
+      margin-bottom: 10px;
+      word-wrap: break-word;
+    }
+    .msg strong {
+      font-weight: bold;
+    }
+    .bottom-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 10px;
+      background-color: #eee;
+    }
+    .bottom-bar input[type="text"] {
+      flex: 1;
+      padding: 8px;
+      font-size: 16px;
+      border: 1px solid #aaa;
+    }
+    .bottom-bar button {
+      padding: 8px 16px;
+      font-size: 16px;
+    }
+    .right {
+      flex: 1;
+      background-color: #f9f9f9;
+      border-left: 1px solid #ccc;
+      padding: 10px;
+    }
+    .right h2 {
+      margin-top: 0;
+    }
+    #userList {
+      list-style: none;
+      padding: 0;
+    }
+    .typing-status {
+      font-style: italic;
+      color: gray;
+      padding-left: 10px;
+    }
+    @media (max-width: 600px) {
+      .container { flex-direction: column; }
+      .bottom-bar { flex-direction: column; }
+      .bottom-bar input, .bottom-bar button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="left">
+    <div id="chatBox"></div>
+    <div id="typingStatus" class="typing-status"></div>
+    <div class="bottom-bar">
+      <input type="text" id="nickname" placeholder="Tên (mặc định: Ẩn danh)">
+      <input type="text" id="message" placeholder="Nhập tin nhắn...">
+      <input type="file" id="imageInput" accept="image/*">
+      <button onclick="window.sendMessage()">Gửi</button>
+      <button id="clearBtn" onclick="window.clearChat()" style="display:none;">🧹 Xóa tất cả</button>
+    </div>
+  </div>
+  <div class="right">
+    <p style="font-size:12px; color:gray; font-style:italic;">
+      * Tin nhắn tự xóa sau 24 giờ. Tên người dùng được khóa trong 1 trình duyệt để tránh nhầm lẫn. Vui lòng không đặt trùng tên!
+    </p>
+    <h2>Thành viên</h2>
+    <ul id="userList"></ul>
+  </div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
   import {
@@ -7,7 +107,6 @@
     getStorage, ref as sRef, uploadBytes, getDownloadURL
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
 
-  // Firebase cấu hình mới
   const config = {
     apiKey: "AIzaSyAwz09EQouPZsgxnIQaAKiGfUKrlbbd7sM",
     authDomain: "thapcamchat.firebaseapp.com",
@@ -35,34 +134,34 @@
   const userColorMap = {};
   const activeUsers = new Set();
   let isAdmin = false;
+  let lastSentTime = 0;
 
   function getColorForUser(name) {
     if (!userColorMap[name]) {
-      userColorMap[name] = `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`;
+      userColorMap[name] = `hsl(${Math.random() * 360}, 70%, 50%)`;
     }
     return userColorMap[name];
   }
-
-  let lastSentTime = 0;
 
   window.sendMessage = async function () {
     let nickname = localStorage.getItem("lockedName") || nicknameInput.value.trim() || "Ẩn danh";
     if (!localStorage.getItem("lockedName")) {
       if ([...activeUsers].includes(nickname)) {
-        alert("Tên này đã được sử dụng. Vui lòng chọn tên khác.");
+        alert("Tên đã tồn tại. Vui lòng chọn tên khác.");
         return;
       }
       localStorage.setItem("lockedName", nickname);
     }
     nicknameInput.value = nickname;
     nicknameInput.disabled = true;
+
     const message = messageInput.value.trim();
     const file = imageInput.files[0];
     if (!message && !file) return;
 
     const now = Date.now();
     if (now - lastSentTime < 5000) {
-      alert("Bạn phải chờ 5 giây giữa mỗi tin nhắn để tránh spam.");
+      alert("Vui lòng chờ 5 giây giữa các tin nhắn.");
       return;
     }
     lastSentTime = now;
@@ -82,23 +181,23 @@
     push(messagesRef, {
       name: nickname,
       msg: message,
-      img: imgURL || null,
+      img: imgURL,
       time: new Date().toLocaleTimeString(),
-      createdAt: Date.now()
+      createdAt: now
     });
+
     messageInput.value = "";
     imageInput.value = null;
     set(typingRef, null);
     updateUserList(nickname);
-  }
+  };
 
   window.clearChat = function () {
-    if (!isAdmin) return alert("Chỉ admin mới được xóa toàn bộ tin nhắn!");
-    if (confirm("Bạn chắc chắn muốn xóa toàn bộ tin nhắn không?")) {
+    if (!isAdmin) return alert("Chỉ admin mới có quyền xoá!");
+    if (confirm("Bạn có chắc muốn xoá tất cả tin nhắn không?")) {
       remove(messagesRef);
-      localStorage.removeItem("chatBackup");
     }
-  }
+  };
 
   function updateUserList(name) {
     if (!activeUsers.has(name)) {
@@ -108,12 +207,6 @@
       li.style.color = getColorForUser(name);
       userList.appendChild(li);
     }
-  }
-
-  function saveToLocal(message) {
-    const history = JSON.parse(localStorage.getItem("chatBackup") || "[]");
-    history.push(message);
-    localStorage.setItem("chatBackup", JSON.stringify(history));
   }
 
   function displayMessage({ name, msg, time, img }) {
@@ -137,30 +230,15 @@
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  function loadAllMessages() {
-    onValue(messagesRef, (snapshot) => {
-      const messages = snapshot.val();
-      if (!messages) return;
-      chatBox.innerHTML = "";
-      localStorage.removeItem("chatBackup");
-      Object.values(messages).forEach((msgData) => {
-        displayMessage(msgData);
-        updateUserList(msgData.name);
-        saveToLocal(msgData);
-      });
-    }, { onlyOnce: true });
-  }
-
-  onChildAdded(messagesRef, snapshot => {
-    const msgData = snapshot.val();
-    displayMessage(msgData);
-    updateUserList(msgData.name);
-    saveToLocal(msgData);
+  onChildAdded(messagesRef, (snapshot) => {
+    const msg = snapshot.val();
+    displayMessage(msg);
+    updateUserList(msg.name);
   });
 
   messageInput.addEventListener("input", () => {
-    const nickname = nicknameInput.value.trim() || "Ẩn danh";
-    set(typingRef, nickname);
+    const name = nicknameInput.value.trim() || "Ẩn danh";
+    set(typingRef, name);
   });
 
   onValue(typingRef, (snapshot) => {
@@ -171,6 +249,6 @@
   messageInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") window.sendMessage();
   });
-
-  loadAllMessages();
 </script>
+</body>
+</html>
