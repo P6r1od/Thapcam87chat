@@ -1,13 +1,28 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>NM Chat Realtime</title>
   <style>
+    :root {
+      --bg: #f0f0f0;
+      --fg: #000;
+      --chat-bg: #fff;
+      --right-bg: #f9f9f9;
+      --border: #ccc;
+    }
+    body.dark {
+      --bg: #1e1e1e;
+      --fg: #fff;
+      --chat-bg: #2c2c2c;
+      --right-bg: #2c2c2c;
+      --border: #555;
+    }
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background-color: #f0f0f0;
+      background-color: var(--bg);
+      color: var(--fg);
     }
     .container {
       display: flex;
@@ -17,15 +32,15 @@
       flex: 3;
       display: flex;
       flex-direction: column;
-      background-color: #ffffff;
+      background-color: var(--chat-bg);
       padding: 10px;
     }
     #chatBox {
       flex: 1;
-      border: 1px solid #ccc;
+      border: 1px solid var(--border);
       padding: 10px;
       overflow-y: auto;
-      background-color: #fff;
+      background-color: var(--chat-bg);
     }
     .msg {
       margin-bottom: 10px;
@@ -39,13 +54,15 @@
       flex-wrap: wrap;
       gap: 5px;
       padding: 10px;
-      background-color: #eee;
+      background-color: var(--right-bg);
     }
     .bottom-bar input[type="text"] {
       flex: 1;
       padding: 8px;
       font-size: 16px;
       border: 1px solid #aaa;
+      background-color: var(--chat-bg);
+      color: var(--fg);
     }
     .bottom-bar button {
       padding: 8px 16px;
@@ -53,8 +70,8 @@
     }
     .right {
       flex: 1;
-      background-color: #f9f9f9;
-      border-left: 1px solid #ccc;
+      background-color: var(--right-bg);
+      border-left: 1px solid var(--border);
       padding: 10px;
     }
     .right h2 {
@@ -63,206 +80,207 @@
     #userList {
       list-style: none;
       padding: 0;
+      margin: 10px 0;
     }
     .typing-status {
       font-style: italic;
       color: gray;
       padding-left: 10px;
     }
+    #themeToggle {
+      margin-top: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
     @media (max-width: 600px) {
-      .container { flex-direction: column; }
       .bottom-bar { flex-direction: column; }
       .bottom-bar input, .bottom-bar button { width: 100%; }
+      .container { flex-direction: column; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="left">
-      <div id="chatBox"></div>
-      <div id="typingStatus" class="typing-status"></div>
-      <div class="bottom-bar">
-        <input type="text" id="nickname" placeholder="Tên (mặc định: Ẩn danh)">
-        <input type="text" id="message" placeholder="Nhập tin nhắn...">
-        <input type="file" id="imageInput" accept="image/*">
-        <button onclick="window.sendMessage()">Gửi</button>
-        <button id="clearBtn" onclick="window.clearChat()" style="display:none;">🧹 Xóa tất cả</button>
-      </div>
-    </div>
-    <div class="right">
-      <p style="font-size:12px; color:gray; font-style:italic;">
-        * Tin nhắn được lưu trên đám mây và sẽ hiển thị lại khi truy cập lại trang. Tên người dùng được khóa trong 1 trình duyệt để tránh nhầm lẫn.
-      </p>
-      <h2>Thành viên</h2>
-      <ul id="userList"></ul>
+<div class="container">
+  <div class="left">
+    <div id="chatBox"></div>
+    <div id="typingStatus" class="typing-status"></div>
+    <div class="bottom-bar">
+      <input type="text" id="nickname" placeholder="Tên (mặc định: Ẩn danh)">
+      <input type="text" id="message" placeholder="Nhập tin nhắn...">
+      <input type="file" id="imageInput" accept="image/*">
+      <button onclick="window.sendMessage()">Gửi</button>
+      <button id="clearBtn" onclick="window.clearChat()" style="display: none">🧹 Xóa tất cả</button>
+      <button id="themeToggle">🌙 Chế độ tối</button>
     </div>
   </div>
+  <div class="right">
+    <p style="font-size: 12px; color: gray; font-style: italic;">
+      * Tin nhắn sẽ tự động xóa sau 24 giờ. Tên người dùng sẽ được khóa trong 1 trình duyệt và không được đổi để tránh nhầm lẫn. Vui lòng không đặt trùng tên, chat mới ở bản beta, xin hãy thông cảm nếu có lỗi!
+    </p>
+    <h2>Thành viên</h2>
+    <ul id="userList"></ul>
+  </div>
+</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import {
-      getDatabase, ref, push, onChildAdded, remove, set, onValue
-    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
-    import {
-      getStorage, ref as sRef, uploadBytes, getDownloadURL
-    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import { getDatabase, ref, push, onChildAdded, remove, set, onValue } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+  import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-storage.js";
 
-    const config = {
-      apiKey: "AIzaSyAwz09EQouPZsgxnIQaAKiGfUKrlbbd7sM",
-      authDomain: "thapcamchat.firebaseapp.com",
-      databaseURL: "https://thapcamchat-default-rtdb.firebaseio.com",  // ✅ ĐÃ SỬA CHÍNH XÁC
-      projectId: "thapcamchat",
-      storageBucket: "thapcamchat.appspot.com",
-      messagingSenderId: "832278442913",
-      appId: "1:832278442913:web:b24e7b6d7b283e9885d1e0"
-    };
+  const config = {
+    apiKey: "AIzaSyAwz09EQouPZsgxnIQaAKiGfUKrlbbd7sM",
+    authDomain: "thapcamchat.firebaseapp.com",
+    databaseURL: "https://thapcamchat-default-rtdb.firebaseio.com",
+    projectId: "thapcamchat",
+    storageBucket: "thapcamchat.appspot.com",
+    messagingSenderId: "832278442913",
+    appId: "1:832278442913:web:b24e7b6d7b283e9885d1e0"
+  };
 
-    const app = initializeApp(config);
-    const db = getDatabase(app);
-    const storage = getStorage(app);
-    const messagesRef = ref(db, "messages");
-    const typingRef = ref(db, "typing");
+  const app = initializeApp(config);
+  const db = getDatabase(app);
+  const storage = getStorage(app);
+  const messagesRef = ref(db, "messages");
+  const typingRef = ref(db, "typing");
 
-    const chatBox = document.getElementById("chatBox");
-    const messageInput = document.getElementById("message");
-    const nicknameInput = document.getElementById("nickname");
-    const typingStatus = document.getElementById("typingStatus");
-    const userList = document.getElementById("userList");
-    const clearBtn = document.getElementById("clearBtn");
-    const imageInput = document.getElementById("imageInput");
+  const chatBox = document.getElementById("chatBox");
+  const messageInput = document.getElementById("message");
+  const nicknameInput = document.getElementById("nickname");
+  const typingStatus = document.getElementById("typingStatus");
+  const userList = document.getElementById("userList");
+  const clearBtn = document.getElementById("clearBtn");
+  const imageInput = document.getElementById("imageInput");
 
-    const userColorMap = {};
-    const activeUsers = new Set();
-    let isAdmin = false;
-    let lastSentTime = 0;
+  const userColorMap = JSON.parse(localStorage.getItem("userColors") || "{}");
+  const activeUsers = new Set();
+  let isAdmin = false;
+  let lastSentTime = 0;
 
-    function getColorForUser(name) {
-      if (!userColorMap[name]) {
-        userColorMap[name] = `hsl(${Math.random() * 360}, 70%, 50%)`;
-      }
-      return userColorMap[name];
+  function getColorForUser(name) {
+    if (!userColorMap[name]) {
+      userColorMap[name] = `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)`;
+      localStorage.setItem("userColors", JSON.stringify(userColorMap));
     }
+    return userColorMap[name];
+  }
 
-    window.sendMessage = async function () {
-      let nickname = localStorage.getItem("lockedName") || nicknameInput.value.trim() || "Ẩn danh";
-      if (!localStorage.getItem("lockedName")) {
-        if ([...activeUsers].includes(nickname)) {
-          alert("Tên đã tồn tại. Vui lòng chọn tên khác.");
-          return;
-        }
-        localStorage.setItem("lockedName", nickname);
-      }
-      nicknameInput.value = nickname;
-      nicknameInput.disabled = true;
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    document.body.classList.toggle("dark");
+    const dark = document.body.classList.contains("dark");
+    localStorage.setItem("theme", dark ? "dark" : "light");
+    document.getElementById("themeToggle").textContent = dark ? "☀️ Chế độ sáng" : "🌙 Chế độ tối";
+  });
 
-      const message = messageInput.value.trim();
-      const file = imageInput.files[0];
-      if (!message && !file) return;
+  if (localStorage.getItem("theme") === "dark") {
+    document.body.classList.add("dark");
+    document.getElementById("themeToggle").textContent = "☀️ Chế độ sáng";
+  }
 
-      const now = Date.now();
-      if (now - lastSentTime < 5000) {
-        alert("Vui lòng chờ 5 giây giữa các tin nhắn.");
+  window.sendMessage = async function () {
+    let nickname = localStorage.getItem("lockedName") || nicknameInput.value.trim() || "Ẩn danh";
+    if (!localStorage.getItem("lockedName")) {
+      if ([...activeUsers].includes(nickname)) {
+        alert("Tên này đã được sử dụng. Vui lòng chọn tên khác.");
         return;
       }
-      lastSentTime = now;
+      localStorage.setItem("lockedName", nickname);
+    }
+    nicknameInput.value = nickname;
+    nicknameInput.disabled = true;
+    const message = messageInput.value.trim();
+    const file = imageInput.files[0];
+    if (!message && !file) return;
 
-      if (nickname.toLowerCase() === "therealguy1201") {
-        isAdmin = true;
-        clearBtn.style.display = "inline-block";
-      }
+    const now = Date.now();
+    if (now - lastSentTime < 5000) {
+      alert("Bạn phải chờ 5 giây giữa mỗi tin nhắn để tránh spam.");
+      return;
+    }
+    lastSentTime = now;
 
-      let imgURL = null;
-      if (file) {
-        const fileRef = sRef(storage, `images/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        imgURL = await getDownloadURL(fileRef);
-      }
-
-      push(messagesRef, {
-        name: nickname,
-        msg: message,
-        img: imgURL,
-        time: new Date().toLocaleTimeString(),
-        createdAt: now
-      });
-
-      messageInput.value = "";
-      imageInput.value = null;
-      set(typingRef, null);
-      updateUserList(nickname);
-    };
-
-    window.clearChat = function () {
-      if (!isAdmin) return alert("Chỉ admin mới có quyền xoá!");
-      if (confirm("Bạn có chắc muốn xoá tất cả tin nhắn không?")) {
-        remove(messagesRef);
-      }
-    };
-
-    function updateUserList(name) {
-      if (!activeUsers.has(name)) {
-        activeUsers.add(name);
-        const li = document.createElement("li");
-        li.textContent = name;
-        li.style.color = getColorForUser(name);
-        userList.appendChild(li);
-      }
+    if (nickname.toLowerCase() === "therealguy1201") {
+      isAdmin = true;
+      clearBtn.style.display = "inline-block";
     }
 
-    function displayMessage({ name, msg, time, img }) {
-      const div = document.createElement("div");
-      div.className = "msg";
-      div.innerHTML = `<strong style="color:${getColorForUser(name)}">${name}</strong>: ${msg || ""}`;
-      if (img) {
-        const imageElem = document.createElement("img");
-        imageElem.src = img;
-        imageElem.style.maxWidth = "200px";
-        imageElem.style.display = "block";
-        imageElem.style.marginTop = "5px";
-        div.appendChild(imageElem);
-      }
-      const timeSpan = document.createElement("span");
-      timeSpan.style.fontSize = "12px";
-      timeSpan.style.color = "#888";
-      timeSpan.textContent = ` (${time})`;
-      div.appendChild(timeSpan);
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
+    let imgURL = null;
+    if (file) {
+      const fileRef = sRef(storage, `images/${Date.now()}_${file.name}`);
+      await uploadBytes(fileRef, file);
+      imgURL = await getDownloadURL(fileRef);
     }
 
-    function loadChatHistory() {
-      onValue(messagesRef, (snapshot) => {
-        const messages = snapshot.val();
-        if (!messages) return;
-        chatBox.innerHTML = "";
-        Object.values(messages).forEach((msg) => {
-          displayMessage(msg);
-          updateUserList(msg.name);
-        });
-      }, { onlyOnce: true });
+    push(messagesRef, {
+      name: nickname,
+      msg: message,
+      img: imgURL || null,
+      time: new Date().toLocaleTimeString(),
+      createdAt: Date.now()
+    });
+    messageInput.value = "";
+    imageInput.value = null;
+    set(typingRef, null);
+    updateUserList(nickname);
+  }
+
+  window.clearChat = function () {
+    if (!isAdmin) return alert("Chỉ admin mới được xóa toàn bộ tin nhắn!");
+    if (confirm("Bạn chắc chắn muốn xóa toàn bộ tin nhắn không?")) {
+      remove(messagesRef);
+      localStorage.removeItem("chatBackup");
     }
+  }
 
-    loadChatHistory();
+  function updateUserList(name) {
+    if (!activeUsers.has(name)) {
+      activeUsers.add(name);
+      const li = document.createElement("li");
+      li.textContent = name;
+      li.style.color = getColorForUser(name);
+      userList.appendChild(li);
+    }
+  }
 
-    onChildAdded(messagesRef, (snapshot) => {
-      const msg = snapshot.val();
-      displayMessage(msg);
-      updateUserList(msg.name);
-    });
+  function displayMessage({ name, msg, time, img }) {
+    const div = document.createElement("div");
+    div.className = "msg";
+    div.innerHTML = `<strong style="color:${getColorForUser(name)}">${name}</strong>: ${msg || ""}`;
+    if (img) {
+      const imageElem = document.createElement("img");
+      imageElem.src = img;
+      imageElem.style.maxWidth = "200px";
+      imageElem.style.display = "block";
+      imageElem.style.marginTop = "5px";
+      div.appendChild(imageElem);
+    }
+    const timeSpan = document.createElement("span");
+    timeSpan.style.fontSize = "12px";
+    timeSpan.style.color = "#888";
+    timeSpan.textContent = ` (${time})`;
+    div.appendChild(timeSpan);
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
 
-    messageInput.addEventListener("input", () => {
-      const name = nicknameInput.value.trim() || "Ẩn danh";
-      set(typingRef, name);
-    });
+  onChildAdded(messagesRef, snapshot => {
+    const msgData = snapshot.val();
+    displayMessage(msgData);
+    updateUserList(msgData.name);
+  });
 
-    onValue(typingRef, (snapshot) => {
-      const name = snapshot.val();
-      typingStatus.textContent = name ? `${name} đang gõ...` : "";
-    });
+  messageInput.addEventListener("input", () => {
+    const nickname = nicknameInput.value.trim() || "Ẩn danh";
+    set(typingRef, nickname);
+  });
 
-    messageInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") window.sendMessage();
-    });
-  </script>
+  onValue(typingRef, (snapshot) => {
+    const name = snapshot.val();
+    typingStatus.textContent = name ? `${name} đang gõ...` : "";
+  });
+
+  messageInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") window.sendMessage();
+  });
+</script>
 </body>
 </html>
