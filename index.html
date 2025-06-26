@@ -110,7 +110,7 @@
     const config = {
       apiKey: "AIzaSyAwz09EQouPZsgxnIQaAKiGfUKrlbbd7sM",
       authDomain: "thapcamchat.firebaseapp.com",
-      databaseURL: "https://thapcamchat-default-rtdb.asia-southeast1.firebasedatabase.app",
+      databaseURL: "https://thapcamchat-default-rtdb.firebaseio.com",  // ✅ ĐÃ SỬA CHÍNH XÁC
       projectId: "thapcamchat",
       storageBucket: "thapcamchat.appspot.com",
       messagingSenderId: "832278442913",
@@ -230,12 +230,11 @@
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // ✅ TẢI TOÀN BỘ TIN NHẮN LỊCH SỬ LÚC MỞ TRANG
     function loadChatHistory() {
       onValue(messagesRef, (snapshot) => {
         const messages = snapshot.val();
         if (!messages) return;
-        chatBox.innerHTML = ""; // tránh lặp lại khi reload
+        chatBox.innerHTML = "";
         Object.values(messages).forEach((msg) => {
           displayMessage(msg);
           updateUserList(msg.name);
@@ -243,9 +242,8 @@
       }, { onlyOnce: true });
     }
 
-    loadChatHistory(); // Gọi khi mở trang
+    loadChatHistory();
 
-    // ✅ TIẾP TỤC NGHE REALTIME TIN NHẮN MỚI
     onChildAdded(messagesRef, (snapshot) => {
       const msg = snapshot.val();
       displayMessage(msg);
